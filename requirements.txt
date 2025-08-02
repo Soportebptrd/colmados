@@ -6,3 +6,4 @@ scikit-learn
 matplotlib
 wordcloud
 fpdf2
+streamlit_extras
