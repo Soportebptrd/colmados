@@ -1,0 +1,8 @@
+pandas
+plotly
+streamlit
+pydeck
+scikit-learn
+matplotlib
+wordcloud
+fpdf2
