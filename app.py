@@ -961,36 +961,36 @@ def generar_resumen_ejecutivo_completo(df, marcas_explotadas):
         
         pdf.chapter_body(respuesta_8)
     
-    # 2. RECOMENDACIONES ESTRATÉGICAS
-    pdf.add_page()
-    pdf.chapter_title('RECOMENDACIONES ESTRATÉGICAS BASADAS EN LOS HALLAZGOS')
+    # # 2. RECOMENDACIONES ESTRATÉGICAS
+    # pdf.add_page()
+    # pdf.chapter_title('RECOMENDACIONES ESTRATÉGICAS BASADAS EN LOS HALLAZGOS')
     
-    recomendaciones = """
-    1. ESTRATEGIA DE PENETRACIÓN DE MERCADO
-    • Incrementar presencia de NIVEO en sectores con baja penetración
-    • Desarrollar programas de incentivos para distribuidores
-    • Implementar estrategias de visual merchandising en puntos de venta
+    # recomendaciones = """
+    # 1. ESTRATEGIA DE PENETRACIÓN DE MERCADO
+    # • Incrementar presencia de NIVEO en sectores con baja penetración
+    # • Desarrollar programas de incentivos para distribuidores
+    # • Implementar estrategias de visual merchandising en puntos de venta
     
-    2. OPTIMIZACIÓN DE PRECIOS
-    • Analizar competitividad de precios frente a marcas líderes
-    • Desarrollar estrategias de valor agregado
-    • Considerar promociones temporales en sectores competitivos
+    # 2. OPTIMIZACIÓN DE PRECIOS
+    # • Analizar competitividad de precios frente a marcas líderes
+    # • Desarrollar estrategias de valor agregado
+    # • Considerar promociones temporales en sectores competitivos
     
-    3. FORTALECIMIENTO DE DISTRIBUCIÓN
-    • Identificar y fortalecer relación con proveedores clave
-    • Desarrollar programa de capacitación para vendedores
-    • Implementar sistema de monitoreo de inventarios
+    # 3. FORTALECIMIENTO DE DISTRIBUCIÓN
+    # • Identificar y fortalecer relación con proveedores clave
+    # • Desarrollar programa de capacitación para vendedores
+    # • Implementar sistema de monitoreo de inventarios
     
-    4. ESTRATEGIA DIGITAL
-    • Evaluar oportunidades en plataformas digitales de pedidos
-    • Desarrollar aplicación propia si es viable
-    • Capacitar distribuidores en uso de tecnologías digitales
+    # 4. ESTRATEGIA DIGITAL
+    # • Evaluar oportunidades en plataformas digitales de pedidos
+    # • Desarrollar aplicación propia si es viable
+    # • Capacitar distribuidores en uso de tecnologías digitales
     
-    5. CAPITALIZACIÓN DE INFLUENCIA
-    • Desarrollar programa de incentivos para vendedores
-    • Crear material de capacitación sobre beneficios de NIVEO
-    • Implementar sistema de reconocimiento por ventas
-    """
+    # 5. CAPITALIZACIÓN DE INFLUENCIA
+    # • Desarrollar programa de incentivos para vendedores
+    # • Crear material de capacitación sobre beneficios de NIVEO
+    # • Implementar sistema de reconocimiento por ventas
+    # """
     
     pdf.chapter_body(recomendaciones)
     
@@ -1000,10 +1000,9 @@ def generar_resumen_ejecutivo_completo(df, marcas_explotadas):
     
     metodologia = f"""
     ALCANCE DEL ESTUDIO:
-    • Muestra: {total_establecimientos} establecimientos comerciales
-    • Cobertura: Múltiples sectores geográficos
+    • Muestra: {total_establecimientos} establecimientos comerciales (Colmados)
+    • Cobertura: Gran Santo Domingo y sectores clave
     • Método: Entrevistas presenciales con cuestionario estructurado
-    • Periodo: {df['Timestamp'].dt.date.min() if 'Timestamp' in df.columns else 'N/A'} al {df['Timestamp'].dt.date.max() if 'Timestamp' in df.columns else 'N/A'}
     
     VARIABLES ANALIZADAS:
     • Presencia y distribución de marcas
@@ -1013,11 +1012,8 @@ def generar_resumen_ejecutivo_completo(df, marcas_explotadas):
     • Frecuencia de compra
     • Influencia en punto de venta
     • Uso de plataformas digitales
-    
-    LIMITACIONES:
-    • Los datos dependen de la veracidad de las respuestas
-    • La muestra puede no ser representativa de todos los sectores
-    • Variabilidad en la calidad de la información proporcionada
+    • Respuestas abiertas para insights cualitativos
+    • Análisis estadístico descriptivo y visualización de datos
     """
     
     pdf.chapter_body(metodologia)
