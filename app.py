@@ -530,6 +530,12 @@ def analizar_precios(df):
 # FUNCIONES PARA RESUMEN EJECUTIVO PDF
 # ----------------------------------------
 class PDFReport(FPDF):
+    def __init__(self):
+        super().__init__()
+        # Configuración para mejor compatibilidad
+        self.set_auto_page_break(auto=True, margin=15)
+        self.set_margins(15, 15, 15)
+    
     def header(self):
         self.set_font('Arial', 'B', 16)
         self.cell(0, 10, 'Resumen Ejecutivo - Levantamiento de Mercado', 0, 1, 'C')
@@ -549,7 +555,13 @@ class PDFReport(FPDF):
         self.set_font('Arial', '', 12)
         # Reemplazar caracteres problemáticos
         body = body.replace('•', '-').replace('´', "'").replace('`', "'")
-        self.multi_cell(0, 8, body)
+        # Manejar encoding para Streamlit Cloud
+        try:
+            self.multi_cell(0, 8, body)
+        except:
+            # Alternativa si hay problemas de encoding
+            body_safe = body.encode('latin-1', 'replace').decode('latin-1')
+            self.multi_cell(0, 8, body_safe)
         self.ln()
 
 def generar_resumen_ejecutivo(df, marcas_explotadas):
@@ -949,38 +961,38 @@ def generar_resumen_ejecutivo_completo(df, marcas_explotadas):
         
         pdf.chapter_body(respuesta_8)
     
-    # # 2. RECOMENDACIONES ESTRATÉGICAS
-    # pdf.add_page()
-    # pdf.chapter_title('RECOMENDACIONES ESTRATÉGICAS BASADAS EN LOS HALLAZGOS')
+    # 2. RECOMENDACIONES ESTRATÉGICAS
+    pdf.add_page()
+    pdf.chapter_title('RECOMENDACIONES ESTRATÉGICAS BASADAS EN LOS HALLAZGOS')
     
-    # recomendaciones = """
-    # 1. ESTRATEGIA DE PENETRACIÓN DE MERCADO
-    # • Incrementar presencia de NIVEO en sectores con baja penetración
-    # • Desarrollar programas de incentivos para distribuidores
-    # • Implementar estrategias de visual merchandising en puntos de venta
+    recomendaciones = """
+    1. ESTRATEGIA DE PENETRACIÓN DE MERCADO
+    • Incrementar presencia de NIVEO en sectores con baja penetración
+    • Desarrollar programas de incentivos para distribuidores
+    • Implementar estrategias de visual merchandising en puntos de venta
     
-    # 2. OPTIMIZACIÓN DE PRECIOS
-    # • Analizar competitividad de precios frente a marcas líderes
-    # • Desarrollar estrategias de valor agregado
-    # • Considerar promociones temporales en sectores competitivos
+    2. OPTIMIZACIÓN DE PRECIOS
+    • Analizar competitividad de precios frente a marcas líderes
+    • Desarrollar estrategias de valor agregado
+    • Considerar promociones temporales en sectores competitivos
     
-    # 3. FORTALECIMIENTO DE DISTRIBUCIÓN
-    # • Identificar y fortalecer relación con proveedores clave
-    # • Desarrollar programa de capacitación para vendedores
-    # • Implementar sistema de monitoreo de inventarios
+    3. FORTALECIMIENTO DE DISTRIBUCIÓN
+    • Identificar y fortalecer relación con proveedores clave
+    • Desarrollar programa de capacitación para vendedores
+    • Implementar sistema de monitoreo de inventarios
     
-    # 4. ESTRATEGIA DIGITAL
-    # • Evaluar oportunidades en plataformas digitales de pedidos
-    # • Desarrollar aplicación propia si es viable
-    # • Capacitar distribuidores en uso de tecnologías digitales
+    4. ESTRATEGIA DIGITAL
+    • Evaluar oportunidades en plataformas digitales de pedidos
+    • Desarrollar aplicación propia si es viable
+    • Capacitar distribuidores en uso de tecnologías digitales
     
-    # 5. CAPITALIZACIÓN DE INFLUENCIA
-    # • Desarrollar programa de incentivos para vendedores
-    # • Crear material de capacitación sobre beneficios de NIVEO
-    # • Implementar sistema de reconocimiento por ventas
-    # """
+    5. CAPITALIZACIÓN DE INFLUENCIA
+    • Desarrollar programa de incentivos para vendedores
+    • Crear material de capacitación sobre beneficios de NIVEO
+    • Implementar sistema de reconocimiento por ventas
+    """
     
-    # pdf.chapter_body(recomendaciones)
+    pdf.chapter_body(recomendaciones)
     
     # 3. METODOLOGÍA
     pdf.add_page()
@@ -989,8 +1001,9 @@ def generar_resumen_ejecutivo_completo(df, marcas_explotadas):
     metodologia = f"""
     ALCANCE DEL ESTUDIO:
     • Muestra: {total_establecimientos} establecimientos comerciales
-    • Cobertura: Grnan Santo Domingo y sectores clave
+    • Cobertura: Múltiples sectores geográficos
     • Método: Entrevistas presenciales con cuestionario estructurado
+    • Periodo: {df['Timestamp'].dt.date.min() if 'Timestamp' in df.columns else 'N/A'} al {df['Timestamp'].dt.date.max() if 'Timestamp' in df.columns else 'N/A'}
     
     VARIABLES ANALIZADAS:
     • Presencia y distribución de marcas
@@ -1000,19 +1013,43 @@ def generar_resumen_ejecutivo_completo(df, marcas_explotadas):
     • Frecuencia de compra
     • Influencia en punto de venta
     • Uso de plataformas digitales
-    • Respuestas abiertas para insights cualitativos
-    • Análisis estadístico descriptivo y visualización de datos
+    
+    LIMITACIONES:
+    • Los datos dependen de la veracidad de las respuestas
+    • La muestra puede no ser representativa de todos los sectores
+    • Variabilidad en la calidad de la información proporcionada
     """
     
     pdf.chapter_body(metodologia)
     
-    # Guardar PDF
-    pdf_buffer = BytesIO()
-    pdf_output = pdf.output(dest='S').encode('latin-1')
-    pdf_buffer.write(pdf_output)
-    pdf_buffer.seek(0)
-    
-    return pdf_buffer
+    # SOLUCIÓN PARA STREAMLIT CLOUD - Método alternativo
+    try:
+        # Método 1: Usar tempfile (más compatible)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+            pdf.output(tmp.name)
+            with open(tmp.name, 'rb') as f:
+                pdf_buffer = BytesIO(f.read())
+        pdf_buffer.seek(0)
+        return pdf_buffer
+        
+    except Exception as e:
+        # Método 2: Alternativa de respaldo
+        try:
+            pdf_buffer = BytesIO()
+            pdf_output = pdf.output(dest='S')  # Sin encode
+            if isinstance(pdf_output, str):
+                pdf_buffer.write(pdf_output.encode('latin-1'))
+            else:
+                pdf_buffer.write(pdf_output)
+            pdf_buffer.seek(0)
+            return pdf_buffer
+        except:
+            # Método 3: Último recurso
+            pdf_buffer = BytesIO()
+            pdf_output = pdf.output()
+            pdf_buffer.write(pdf_output)
+            pdf_buffer.seek(0)
+            return pdf_buffer
 
 # ----------------------------------------
 # INTERFAZ PRINCIPAL CON 10 TABS
