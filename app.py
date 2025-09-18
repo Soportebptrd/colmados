@@ -11,6 +11,10 @@ import pydeck as pdk
 from sklearn.cluster import KMeans
 from streamlit_extras.metric_cards import style_metric_cards
 from urllib.parse import quote
+from fpdf import FPDF
+import base64
+from io import BytesIO
+import tempfile
 
 # =============================================
 # 1. SECCIÓN DE AUTENTICACIÓN (AL PRINCIPIO DEL ARCHIVO)
@@ -523,6 +527,494 @@ def analizar_precios(df):
     return pd.DataFrame() 
 
 # ----------------------------------------
+# FUNCIONES PARA RESUMEN EJECUTIVO PDF
+# ----------------------------------------
+class PDFReport(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 16)
+        self.cell(0, 10, 'Resumen Ejecutivo - Levantamiento de Mercado', 0, 1, 'C')
+        self.ln(5)
+    
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+    
+    def chapter_title(self, title):
+        self.set_font('Arial', 'B', 14)
+        self.cell(0, 10, title, 0, 1, 'L')
+        self.ln(2)
+    
+    def chapter_body(self, body):
+        self.set_font('Arial', '', 12)
+        # Reemplazar caracteres problemáticos
+        body = body.replace('•', '-').replace('´', "'").replace('`', "'")
+        self.multi_cell(0, 8, body)
+        self.ln()
+
+def generar_resumen_ejecutivo(df, marcas_explotadas):
+    pdf = PDFReport()
+    pdf.add_page()
+    
+    # Portada
+    pdf.set_font('Arial', 'B', 20)
+    pdf.cell(0, 40, 'RESUMEN EJECUTIVO', 0, 1, 'C')
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 20, 'Levantamiento de Marcas Industrias Nigua', 0, 1, 'C')
+    pdf.set_font('Arial', '', 12)
+    pdf.cell(0, 10, f'Fecha de generacion: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
+    pdf.ln(30)
+    
+    # 1. Resumen Ejecutivo
+    pdf.chapter_title('1. Resumen Ejecutivo')
+    total_establecimientos = len(df)
+    pdf.chapter_body(f"""
+    Este reporte presenta los hallazgos clave del levantamiento de mercado realizado para Industrias Nigua, 
+    abarcando un total de {total_establecimientos} establecimientos analizados. El estudio revela insights 
+    cruciales sobre la presencia de marcas, comportamiento de precios, distribucion geografica y 
+    oportunidades de mercado.
+    """)
+    
+    # 2. Hallazgos Principales
+    pdf.chapter_title('2. Hallazgos Principales')
+    
+    # Métricas clave
+    metricas_texto = ""
+    if 'MARCAS_LISTA' in df.columns and not marcas_explotadas.empty:
+        total_marcas = marcas_explotadas['MARCAS_LISTA'].nunique()
+        marca_lider = marcas_explotadas['MARCAS_LISTA'].value_counts().index[0]
+        penetracion_lider = (marcas_explotadas['MARCAS_LISTA'].value_counts().iloc[0] / total_establecimientos * 100)
+        
+        sectores_count = df['SELECCION BARRIO/SECTOR'].nunique() if 'SELECCION BARRIO/SECTOR' in df.columns else "N/A"
+        
+        metricas_texto = f"""
+    - Penetracion de mercado: Se identificaron {total_marcas} marcas diferentes en el mercado
+    - Marca lider: {marca_lider} con {penetracion_lider:.1f}% de presencia
+    - Distribucion geografica: Cobertura en {sectores_count} sectores
+        """
+    else:
+        metricas_texto = "No hay datos suficientes de marcas para el analisis."
+    
+    pdf.chapter_body(metricas_texto)
+    
+    # 3. Análisis de Presencia de Marcas
+    pdf.chapter_title('3. Analisis de Presencia de Marcas')
+    
+    if not marcas_explotadas.empty:
+        top_5_marcas = marcas_explotadas['MARCAS_LISTA'].value_counts().head(5)
+        presencia_text = "\n".join([f"- {marca}: {count} establecimientos ({count/total_establecimientos*100:.1f}%)" 
+                                  for marca, count in top_5_marcas.items()])
+        
+        pdf.chapter_body(f"Top 5 marcas por presencia:\n\n{presencia_text}")
+    else:
+        pdf.chapter_body("No se encontraron datos de marcas para el analisis.")
+    
+    # 4. Análisis de Precios
+    pdf.chapter_title('4. Analisis de Precios')
+    
+    # Buscar columnas de precios
+    precio_cols = [col for col in df.columns if col.startswith('PRECIO_')]
+    if precio_cols:
+        precios_info = []
+        for col in precio_cols:
+            marca = col.replace('PRECIO_', '')
+            precios = df[col].dropna()
+            if not precios.empty:
+                precios_info.append(f"- {marca}: ${precios.mean():.2f} (promedio)")
+        
+        if precios_info:
+            pdf.chapter_body("Precios promedio por marca:\n\n" + "\n".join(precios_info[:5]))  # Limitar a 5 marcas
+        else:
+            pdf.chapter_body("No se encontraron datos de precios validos.")
+    else:
+        pdf.chapter_body("No se encontraron columnas de precios en los datos.")
+    
+    # 5. Recomendaciones Estratégicas
+    pdf.chapter_title('5. Recomendaciones Estrategicas')
+    pdf.chapter_body("""
+    - Incrementar presencia en sectores con baja penetracion
+    - Desarrollar estrategias competitivas de precios
+    - Fortalecer relacion con distribuidores clave
+    - Implementar programas de fidelizacion
+    - Realizar seguimiento continuo del mercado
+    """)
+    
+    # 6. Metodología
+    pdf.add_page()
+    pdf.chapter_title('6. Metodologia')
+    pdf.chapter_body(f"""
+    Este levantamiento se realizo mediante visitas presenciales a establecimientos en diferentes sectores, 
+    utilizando un formulario estructurado para capturar informacion sobre presencia de marcas, precios, 
+    frecuencia de compra y percepcion de rentabilidad.
+    
+    Metodologia:
+    - Muestra: {total_establecimientos} establecimientos
+    - Alcance: Multiple sectores geograficos
+    - Periodo: {datetime.now().strftime("%B %Y")}
+    - Tecnica: Entrevistas directas con responsables de establecimientos
+    """)
+    
+    # 7. Limitaciones
+    pdf.chapter_title('7. Limitaciones')
+    pdf.chapter_body("""
+    - Los datos de precios dependen de la precision reportada por los establecimientos
+    - La muestra puede no ser representativa de todos los sectores
+    - Algunos establecimientos pueden no haber proporcionado informacion completa
+    """)
+    
+    # Guardar PDF en buffer
+    pdf_buffer = BytesIO()
+    pdf.output(pdf_buffer)
+    pdf_buffer.seek(0)
+    
+    return pdf_buffer
+
+# Función alternativa sin gráficos para mayor estabilidad
+def generar_reporte_basico(df, marcas_explotadas):
+    """Versión simplificada y más robusta del reporte"""
+    pdf = PDFReport()
+    pdf.add_page()
+    
+    # Portada
+    pdf.set_font('Arial', 'B', 20)
+    pdf.cell(0, 40, 'INFORME EJECUTIVO', 0, 1, 'C')
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 20, 'Industrias Nigua - Levantamiento de Mercado', 0, 1, 'C')
+    pdf.set_font('Arial', '', 12)
+    pdf.cell(0, 10, f'Generado el: {datetime.now().strftime("%d/%m/%Y")}', 0, 1, 'C')
+    pdf.ln(30)
+    
+    # Resumen
+    pdf.chapter_title('RESUMEN EJECUTIVO')
+    
+    total_establecimientos = len(df)
+    texto_resumen = f"""
+    Este informe presenta los resultados del levantamiento de mercado realizado por Industrias Nigua.
+    
+    DATOS PRINCIPALES:
+    - Total de establecimientos visitados: {total_establecimientos}
+    """
+    
+    if 'SELECCION BARRIO/SECTOR' in df.columns:
+        sectores = df['SELECCION BARRIO/SECTOR'].nunique()
+        texto_resumen += f"""
+    - Sectores cubiertos: {sectores}
+        """
+    
+    if not marcas_explotadas.empty:
+        marcas_count = marcas_explotadas['MARCAS_LISTA'].nunique()
+        texto_resumen += f"""
+    - Marcas identificadas: {marcas_count}
+        """
+    
+    pdf.chapter_body(texto_resumen)
+    
+    # Hallazgos clave
+    pdf.add_page()
+    pdf.chapter_title('HALLAZGOS PRINCIPALES')
+    
+    hallazgos = """
+    1. DISTRIBUCION DE MARCAS
+    - Presencia de multiples competidores en el mercado
+    - Oportunidades de crecimiento identificadas
+    - Variabilidad en la distribucion por sectores
+    
+    2. COMPORTAMIENTO DE PRECIOS
+    - Rango de precios diverso entre competidores
+    - Oportunidades de posicionamiento competitivo
+    - Potencial para estrategias de valor agregado
+    
+    3. COBERTURA GEOGRAFICA
+    - Amplia distribucion en multiple sectores
+    - Areas de oportunidad para expansion
+    - Potencial para fortalecer presencia
+    """
+    
+    pdf.chapter_body(hallazgos)
+    
+    # Recomendaciones
+    pdf.chapter_title('RECOMENDACIONES ESTRATEGICAS')
+    
+    recomendaciones = """
+    1. EXPANSION DE PRESENCIA
+    - Fortalecer distribucion en sectores sub-atendidos
+    - Desarrollar programas de incentivos para puntos de venta
+    - Implementar estrategias de visual merchandising
+    
+    2. OPTIMIZACION DE PRECIOS
+    - Analizar estructura competitiva de precios
+    - Desarrollar promociones y bundles estrategicos
+    - Implementar estrategias de valor percibido
+    
+    3. FORTALECIMIENTO OPERATIVO
+    - Mejorar logistica de distribucion
+    - Fortalecer relacion con distribuidores clave
+    - Implementar sistema de monitoreo continuo
+    """
+    
+    pdf.chapter_body(recomendaciones)
+    
+    # Guardar PDF
+    pdf_buffer = BytesIO()
+    pdf.output(pdf_buffer)
+    pdf_buffer.seek(0)
+    
+    return pdf_buffer
+
+def generar_resumen_ejecutivo_completo(df, marcas_explotadas):
+    """Genera un resumen ejecutivo completo que responde a las preguntas del cuestionario"""
+    pdf = PDFReport()
+    pdf.add_page()
+    
+    # Portada
+    pdf.set_font('Arial', 'B', 20)
+    pdf.cell(0, 40, 'RESUMEN EJECUTIVO - LEVANTAMIENTO DE MERCADO', 0, 1, 'C')
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 20, 'Industrias Nigua - Análisis de Canales', 0, 1, 'C')
+    pdf.set_font('Arial', '', 12)
+    pdf.cell(0, 10, f'Generado el: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
+    pdf.ln(30)
+    
+    total_establecimientos = len(df)
+    
+    # 1. RESPUESTAS A LAS PREGUNTAS DEL CUESTIONARIO
+    pdf.chapter_title('RESPUESTAS A LAS PREGUNTAS DEL CUESTIONARIO')
+    
+    # Pregunta 1: ¿Cuáles marcas están presentes?
+    pdf.chapter_title('1. PRESENCIA DE MARCAS EN EL MERCADO')
+    if not marcas_explotadas.empty:
+        top_10 = marcas_explotadas['MARCAS_LISTA'].value_counts().head(10)
+        respuesta_1 = "Las marcas con mayor presencia en el mercado son:\n\n"
+        for marca, count in top_10.items():
+            porcentaje = (count / total_establecimientos) * 100
+            respuesta_1 += f"• {marca}: {count} establecimientos ({porcentaje:.1f}% de penetración)\n"
+        
+        # Presencia específica de NIVEO
+        niveo_presente = 'NIVEO' in marcas_explotadas['MARCAS_LISTA'].values
+        if niveo_presente:
+            niveo_count = (marcas_explotadas['MARCAS_LISTA'] == 'NIVEO').sum()
+            niveo_porcentaje = (niveo_count / total_establecimientos) * 100
+            respuesta_1 += f"\nNIVEO se encuentra en {niveo_count} establecimientos ({niveo_porcentaje:.1f}% del mercado)"
+        
+        pdf.chapter_body(respuesta_1)
+    
+    # Pregunta 2: Precios de venta
+    pdf.add_page()
+    pdf.chapter_title('2. ESTRUCTURA DE PRECIOS POR MARCA')
+    
+    precio_cols = [col for col in df.columns if col.startswith('PRECIO_')]
+    if precio_cols:
+        respuesta_2 = "Los precios promedio de venta reportados son:\n\n"
+        for col in precio_cols:
+            marca = col.replace('PRECIO_', '')
+            precios = df[col].dropna()
+            if not precios.empty:
+                respuesta_2 += f"• {marca}: ${precios.mean():.2f} (rango: ${precios.min():.2f} - ${precios.max():.2f})\n"
+        
+        pdf.chapter_body(respuesta_2)
+    
+    # Pregunta 3: Marca más rentable
+    pdf.chapter_title('3. RENTABILIDAD PERCIBIDA POR MARCA')
+    
+    # Buscar columna de rentabilidad con diferentes nombres posibles
+    col_rentabilidad = None
+    for col in df.columns:
+        if any(keyword in col.upper() for keyword in ['BENEFICIO', 'RENTABILIDAD', 'MAYOR GANANCIA']):
+            col_rentabilidad = col
+            break
+    
+    if col_rentabilidad and col_rentabilidad in df.columns:
+        rentabilidad = df[col_rentabilidad].value_counts()
+        respuesta_3 = "Las marcas consideradas más rentables por los establecimientos:\n\n"
+        for marca, count in rentabilidad.items():
+            if pd.notna(marca) and str(marca).strip() not in ['', 'nan', 'None']:
+                porcentaje = (count / rentabilidad.sum()) * 100
+                respuesta_3 += f"• {marca}: {count} menciones ({porcentaje:.1f}%)\n"
+        
+        pdf.chapter_body(respuesta_3)
+    
+    # Pregunta 4: Razones de rentabilidad
+    pdf.chapter_title('4. RAZONES DE RENTABILIDAD')
+    
+    # Buscar columna de "por qué" con diferentes nombres
+    col_porque = None
+    for col in df.columns:
+        if any(keyword in col.upper() for keyword in ['POR QUE', 'RAZON', 'MOTIVO', 'EXPLICACION']):
+            col_porque = col
+            break
+    
+    if col_porque and col_porque in df.columns:
+        razones = df[col_porque].dropna()
+        if not razones.empty:
+            # Análisis de razones más comunes
+            razones_comunes = razones.value_counts().head(5)
+            respuesta_4 = "Principales razones mencionadas para la rentabilidad:\n\n"
+            for razon, count in razones_comunes.items():
+                respuesta_4 += f"• {razon}: {count} menciones\n"
+            
+            pdf.chapter_body(respuesta_4)
+    
+    # Pregunta 5: Proveedores y canales de compra
+    pdf.add_page()
+    pdf.chapter_title('5. CANALES DE DISTRIBUCIÓN Y PROVEEDORES')
+    
+    # Buscar columna de proveedores
+    col_proveedores = None
+    for col in df.columns:
+        if any(keyword in col.upper() for keyword in ['PROVEEDOR', 'DONDE COMPRA', 'A QUIEN COMPRA', 'DISTRIBUIDOR']):
+            col_proveedores = col
+            break
+    
+    if col_proveedores and col_proveedores in df.columns:
+        proveedores = df[col_proveedores].dropna()
+        if not proveedores.empty:
+            top_proveedores = proveedores.value_counts().head(8)
+            respuesta_5 = "Principales proveedores y canales de compra mencionados:\n\n"
+            for proveedor, count in top_proveedores.items():
+                respuesta_5 += f"• {proveedor}: {count} menciones\n"
+            
+            pdf.chapter_body(respuesta_5)
+    
+    # Pregunta 6: Frecuencia de compra
+    pdf.chapter_title('6. FRECUENCIA DE COMPRA')
+    
+    # Buscar columna de frecuencia
+    col_frecuencia = None
+    for col in df.columns:
+        if any(keyword in col.upper() for keyword in ['FRECUENCIA', 'CADA CUANTO COMPRA', 'CON QUE FRECUENCIA']):
+            col_frecuencia = col
+            break
+    
+    if col_frecuencia and col_frecuencia in df.columns:
+        frecuencia = df[col_frecuencia].value_counts()
+        respuesta_6 = "Frecuencia de compra reportada por los establecimientos:\n\n"
+        for freq, count in frecuencia.items():
+            if pd.notna(freq):
+                porcentaje = (count / frecuencia.sum()) * 100
+                respuesta_6 += f"• {freq}: {count} establecimientos ({porcentaje:.1f}%)\n"
+        
+        pdf.chapter_body(respuesta_6)
+    
+    # Pregunta 7: Influencia del vendedor
+    pdf.add_page()
+    pdf.chapter_title('7. INFLUENCIA EN DECISIONES DE COMPRA')
+    
+    # Buscar columna de influencia
+    col_influencia = None
+    for col in df.columns:
+        if any(keyword in col.upper() for keyword in ['INFLUYE', 'INFLUENCIA', 'RECOMENDACION', 'VENDEDOR']):
+            col_influencia = col
+            break
+    
+    if col_influencia and col_influencia in df.columns:
+        influencia = df[col_influencia].value_counts()
+        respuesta_7 = "Nivel de influencia percibida por los vendedores:\n\n"
+        for nivel, count in influencia.items():
+            if pd.notna(nivel):
+                porcentaje = (count / influencia.sum()) * 100
+                respuesta_7 += f"• {nivel}: {count} vendedores ({porcentaje:.1f}%)\n"
+        
+        pdf.chapter_body(respuesta_7)
+    
+    # Pregunta 8: Compra por aplicación digital
+    pdf.chapter_title('8. COMPRA MEDIANTE APLICACIÓN DIGITAL')
+    
+    # Buscar columna de compra digital
+    col_digital = None
+    for col in df.columns:
+        if any(keyword in col.upper() for keyword in ['APLICACION', 'DIGITAL', 'APP', 'PLATAFORMA']):
+            col_digital = col
+            break
+    
+    if col_digital and col_digital in df.columns:
+        digital = df[col_digital].value_counts()
+        respuesta_8 = "Uso de aplicaciones digitales para compras:\n\n"
+        for respuesta, count in digital.items():
+            if pd.notna(respuesta):
+                porcentaje = (count / digital.sum()) * 100
+                respuesta_8 += f"• {respuesta}: {count} establecimientos ({porcentaje:.1f}%)\n"
+        
+        # Nombres de aplicaciones específicas mencionadas
+        if 'SI' in digital.index:
+            # Buscar menciones de nombres de apps
+            apps_mentions = []
+            for respuesta in df[col_digital].dropna():
+                if 'SI' in str(respuesta).upper():
+                    # Extraer nombres de apps si se mencionan
+                    if any(app_keyword in str(respuesta).upper() for app_keyword in ['PEDIDOS', 'APP', 'MERCADO', 'UBER', 'RAPPI']):
+                        apps_mentions.append(str(respuesta))
+            
+            if apps_mentions:
+                respuesta_8 += f"\nAplicaciones mencionadas: {', '.join(set(apps_mentions[:5]))}"
+        
+        pdf.chapter_body(respuesta_8)
+    
+    # # 2. RECOMENDACIONES ESTRATÉGICAS
+    # pdf.add_page()
+    # pdf.chapter_title('RECOMENDACIONES ESTRATÉGICAS BASADAS EN LOS HALLAZGOS')
+    
+    # recomendaciones = """
+    # 1. ESTRATEGIA DE PENETRACIÓN DE MERCADO
+    # • Incrementar presencia de NIVEO en sectores con baja penetración
+    # • Desarrollar programas de incentivos para distribuidores
+    # • Implementar estrategias de visual merchandising en puntos de venta
+    
+    # 2. OPTIMIZACIÓN DE PRECIOS
+    # • Analizar competitividad de precios frente a marcas líderes
+    # • Desarrollar estrategias de valor agregado
+    # • Considerar promociones temporales en sectores competitivos
+    
+    # 3. FORTALECIMIENTO DE DISTRIBUCIÓN
+    # • Identificar y fortalecer relación con proveedores clave
+    # • Desarrollar programa de capacitación para vendedores
+    # • Implementar sistema de monitoreo de inventarios
+    
+    # 4. ESTRATEGIA DIGITAL
+    # • Evaluar oportunidades en plataformas digitales de pedidos
+    # • Desarrollar aplicación propia si es viable
+    # • Capacitar distribuidores en uso de tecnologías digitales
+    
+    # 5. CAPITALIZACIÓN DE INFLUENCIA
+    # • Desarrollar programa de incentivos para vendedores
+    # • Crear material de capacitación sobre beneficios de NIVEO
+    # • Implementar sistema de reconocimiento por ventas
+    # """
+    
+    # pdf.chapter_body(recomendaciones)
+    
+    # 3. METODOLOGÍA
+    pdf.add_page()
+    pdf.chapter_title('METODOLOGÍA DEL ESTUDIO')
+    
+    metodologia = f"""
+    ALCANCE DEL ESTUDIO:
+    • Muestra: {total_establecimientos} establecimientos comerciales
+    • Cobertura: Grnan Santo Domingo y sectores clave
+    • Método: Entrevistas presenciales con cuestionario estructurado
+    
+    VARIABLES ANALIZADAS:
+    • Presencia y distribución de marcas
+    • Estructura de precios por marca
+    • Percepción de rentabilidad y razones
+    • Canales de distribución y proveedores
+    • Frecuencia de compra
+    • Influencia en punto de venta
+    • Uso de plataformas digitales
+    • Respuestas abiertas para insights cualitativos
+    • Análisis estadístico descriptivo y visualización de datos
+    """
+    
+    pdf.chapter_body(metodologia)
+    
+    # Guardar PDF
+    pdf_buffer = BytesIO()
+    pdf_output = pdf.output(dest='S').encode('latin-1')
+    pdf_buffer.write(pdf_output)
+    pdf_buffer.seek(0)
+    
+    return pdf_buffer
+
+# ----------------------------------------
 # INTERFAZ PRINCIPAL CON 10 TABS
 # ----------------------------------------
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
@@ -534,7 +1026,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "💬 Influencia del Vendedor",
     "📦 Proveedores y Canales",
     "📝 Respuestas Abiertas",
-    "📥 Análisis General"
+    "📋 Resumen Ejecutivo"
 ])
 
 # ----------------------------------------
@@ -1527,315 +2019,179 @@ with tab8:
             if any(keyword.lower() in col.lower() for keyword in ['por que', 'razon', 'motivo', 'proveedor', 'compra', 'observacion', 'comentario']):
                 st.write(f"- {col}")
 
+# # ----------------------------------------
+# # TAB 9: EXPORTACIÓN DE REPORTES (CORREGIDO - AHORA GENERA PDF)
+# # ----------------------------------------
+# with tab9:
+#     st.header("📊 Análisis General", divider="rainbow")
+    
+#     # Contenido del análisis general
+#     st.subheader("Resumen Completo del Levantamiento")
+    
+#     # Métricas principales
+#     col1, col2, col3 = st.columns(3)
+#     col1.metric("Total Establecimientos", len(df))
+    
+#     if 'SELECCION BARRIO/SECTOR' in df.columns:
+#         sectores = df['SELECCION BARRIO/SECTOR'].nunique()
+#         col2.metric("Sectores Cubiertos", sectores)
+    
+#     if not marcas_explotadas.empty:
+#         marcas_count = marcas_explotadas['MARCAS_LISTA'].nunique()
+#         col3.metric("Marcas Identificadas", marcas_count)
+    
+#     # Función CORREGIDA para generar PDF
+#     def generar_reporte_completo_pdf(df, marcas_explotadas):
+#         """Genera un reporte completo en PDF con todos los análisis"""
+#         pdf = PDFReport()
+#         pdf.add_page()
+        
+#         # Portada
+#         pdf.set_font('Arial', 'B', 20)
+#         pdf.cell(0, 40, 'REPORTE COMPLETO DE LEVANTAMIENTO', 0, 1, 'C')
+#         pdf.set_font('Arial', 'B', 16)
+#         pdf.cell(0, 20, 'Industrias Nigua - Mercado Papel Higiénico', 0, 1, 'C')
+#         pdf.set_font('Arial', '', 12)
+#         pdf.cell(0, 10, f'Fecha: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
+#         pdf.ln(30)
+        
+#         # 1. RESUMEN EJECUTIVO
+#         pdf.chapter_title('1. RESUMEN EJECUTIVO')
+#         total_establecimientos = len(df)
+        
+#         contenido_resumen = f"""
+#         Este reporte presenta los hallazgos del levantamiento de mercado realizado en {total_establecimientos} 
+#         establecimientos comerciales. El estudio abarca múltiples sectores y proporciona insights clave sobre:
+        
+#         - Presencia y distribución de marcas en el mercado
+#         - Estrategias de precios y competitividad
+#         - Comportamiento de compra y frecuencia
+#         - Oportunidades de crecimiento para Industrias Nigua
+        
+#         Principales hallazgos:
+#         • Penetración de mercado de las principales marcas
+#         • Análisis comparativo de precios
+#         • Distribución geográfica de la presencia
+#         • Recomendaciones estratégicas específicas
+#         """
+#         pdf.chapter_body(contenido_resumen)
+        
+#         # 2. METODOLOGÍA
+#         pdf.add_page()
+#         pdf.chapter_title('2. METODOLOGÍA')
+#         pdf.chapter_body(f"""
+#         Método de recolección: Entrevistas presenciales con cuestionario estructurado
+#         Muestra: {total_establecimientos} establecimientos comerciales
+#         Alcance: Múltiples sectores geográficos
+#         Periodo: {df['Timestamp'].min().strftime('%d/%m/%Y') if 'Timestamp' in df.columns else 'N/A'} al {df['Timestamp'].max().strftime('%d/%m/%Y') if 'Timestamp' in df.columns else 'N/A'}
+#         Instrumento: Formulario digital con validación en tiempo real
+#         """)
+        
+#         # 3. ANÁLISIS DE MARCAS
+#         pdf.chapter_title('3. ANÁLISIS DE PRESENCIA DE MARCAS')
+        
+#         if not marcas_explotadas.empty:
+#             top_marcas = marcas_explotadas['MARCAS_LISTA'].value_counts().head(10)
+#             analisis_marcas = "Top 10 marcas por presencia:\n\n"
+#             for marca, count in top_marcas.items():
+#                 porcentaje = (count / total_establecimientos) * 100
+#                 analisis_marcas += f"• {marca}: {count} establecimientos ({porcentaje:.1f}%)\n"
+            
+#             # Presencia de Niveo específicamente
+#             niveo_presente = 'NIVEO' in marcas_explotadas['MARCAS_LISTA'].values
+#             if niveo_presente:
+#                 niveo_count = (marcas_explotadas['MARCAS_LISTA'] == 'NIVEO').sum()
+#                 niveo_porcentaje = (niveo_count / total_establecimientos) * 100
+#                 analisis_marcas += f"\nPresencia específica de NIVEO: {niveo_count} establecimientos ({niveo_porcentaje:.1f}%)"
+            
+#             pdf.chapter_body(analisis_marcas)
+        
+#         # 4. ANÁLISIS DE PRECIOS
+#         pdf.add_page()
+#         pdf.chapter_title('4. ANÁLISIS DE PRECIOS')
+        
+#         precio_cols = [col for col in df.columns if col.startswith('PRECIO_')]
+#         if precio_cols:
+#             precios_info = "Precios promedio por marca:\n\n"
+#             for col in precio_cols:
+#                 marca = col.replace('PRECIO_', '')
+#                 precios = df[col].dropna()
+#                 if not precios.empty:
+#                     precios_info += f"• {marca}: ${precios.mean():.2f} (rango: ${precios.min():.2f} - ${precios.max():.2f})\n"
+            
+#             pdf.chapter_body(precios_info)
+        
+#         # 5. RECOMENDACIONES ESTRATÉGICAS
+#         pdf.chapter_title('5. RECOMENDACIONES ESTRATÉGICAS')
+#         recomendaciones = """
+#         1. EXPANSIÓN DE COBERTURA
+#         • Identificar sectores con baja penetración de Niveo
+#         • Establecer alianzas con distribuidores locales
+#         • Desarrollar programas de incentivos para puntos de venta
+        
+#         2. ESTRATEGIA DE PRECIOS
+#         • Analizar estructura competitiva de precios
+#         • Desarrollar promociones estratégicas
+#         • Crear bundles de productos para mayor valor percibido
+        
+#         3. FORTALECIMIENTO DE MARCA
+#         • Campañas de merchandising en punto de venta
+#         • Programas de fidelización para distribuidores
+#         • Monitoreo continuo del mercado
+#         """
+#         pdf.chapter_body(recomendaciones)
+        
+#         # Guardar PDF
+#         pdf_buffer = BytesIO()
+#         pdf_output = pdf.output(dest='S').encode('latin-1')
+#         pdf_buffer.write(pdf_output)
+#         pdf_buffer.seek(0)
+        
+#         return pdf_buffer
+
+#     # Botón para generar reporte completo en PDF
+#     if st.button("📄 Generar Reporte Completo en PDF", type="primary"):
+#         with st.spinner("Generando reporte completo en PDF..."):
+#             try:
+#                 pdf_buffer = generar_reporte_completo_pdf(df, marcas_explotadas)
+                
+#                 # Crear botón de descarga
+#                 b64 = base64.b64encode(pdf_buffer.getvalue()).decode()
+#                 href = f'<a href="data:application/octet-stream;base64,{b64}" download="reporte_completo_niveo_{datetime.now().strftime("%Y%m%d")}.pdf">⬇️ Descargar Reporte Completo (PDF)</a>'
+                
+#                 st.success("✅ Reporte generado exitosamente en formato PDF!")
+#                 st.markdown(href, unsafe_allow_html=True)
+                
+#             except Exception as e:
+#                 st.error(f"Error al generar el reporte PDF: {str(e)}")
+
 # ----------------------------------------
-# TAB 9: EXPORTACIÓN DE REPORTES
+# TAB 9: RESUMEN EJECUTIVO
 # ----------------------------------------
 with tab9:
-    st.header("🧠 Insights Automáticos", divider="rainbow")
+    st.header("📋 Resumen Ejecutivo Completo", divider="rainbow")
     
-    # ------------------------------------------------------------
-    # 1. ANÁLISIS DE MARCAS
-    # ------------------------------------------------------------
-    st.subheader("🏷️ Análisis de Presencia de Marcas", divider="gray")
+    st.markdown("""
+    ### Generar Resumen Ejecutivo con Respuestas al Cuestionario
     
-    if 'MARCAS_LISTA' in df.columns:
-        # Calcular métricas clave
-        marcas_explotadas = df.explode('MARCAS_LISTA')
-        total_establecimientos = len(df)
-        top_marcas = marcas_explotadas['MARCAS_LISTA'].value_counts().head(5)
-        
-        # Insight 1: Marca líder
-        marca_lider = top_marcas.index[0]
-        porcentaje_lider = (top_marcas[0] / total_establecimientos) * 100
-        
-        # Insight 2: Penetración de Niveo
-        niveo_presente = 'NIVEO' in marcas_explotadas['MARCAS_LISTA'].values
-        niveo_count = (marcas_explotadas['MARCAS_LISTA'] == 'NIVEO').sum() if niveo_presente else 0
-        niveo_porcentaje = (niveo_count / total_establecimientos) * 100
-        
-        # Insight 3: Distribución geográfica
-        sectores_con_niveo = marcas_explotadas[marcas_explotadas['MARCAS_LISTA'] == 'NIVEO']['SELECCION BARRIO/SECTOR'].nunique() if niveo_presente else 0
-        total_sectores = df['SELECCION BARRIO/SECTOR'].nunique()
-        
-        # Mostrar métricas
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Marca líder", marca_lider, f"{porcentaje_lider:.1f}% penetración")
-        col2.metric("Presencia Niveo", f"{niveo_porcentaje:.1f}%", "Presente" if niveo_presente else "Ausente")
-        col3.metric("Cobertura Niveo", f"{sectores_con_niveo}/{total_sectores} sectores", f"{(sectores_con_niveo/total_sectores)*100:.1f}%")
-        
-        # Gráfico comparativo
-        fig_marcas = px.bar(
-            top_marcas,
-            x=top_marcas.index,
-            y=top_marcas.values,
-            title="Top 5 Marcas por Presencia",
-            labels={'x': 'Marca', 'y': 'Establecimientos'},
-            color=top_marcas.index,
-            text=top_marcas.values
-        )
-        fig_marcas.update_traces(texttemplate='%{text}', textposition='outside')
-        st.plotly_chart(fig_marcas, use_container_width=True, key="top_marcas_insights")
-        
-        # Recomendaciones
-        with st.expander("💡 Recomendaciones estratégicas", expanded=True):
-            if marca_lider != 'NIVEO':
-                st.markdown(f"""
-                #### 🚨 Oportunidad competitiva
-                - **{marca_lider}** es la marca líder con un **{porcentaje_lider:.1f}%** de penetración.
-                - Recomendamos analizar sus estrategias de precios, distribución y promoción.
-                - Desarrollar campañas comparativas destacando las ventajas de Niveo.
-                """)
-            
-            if niveo_presente and niveo_porcentaje < 40:
-                st.markdown(f"""
-                #### 📈 Oportunidad de crecimiento
-                - La penetración de Niveo es del **{niveo_porcentaje:.1f}%**, por debajo del objetivo ideal (40%+).
-                - Priorizar campañas en sectores con baja presencia.
-                - Considerar promociones especiales para aumentar distribución.
-                """)
-            
-            if niveo_presente and sectores_con_niveo < total_sectores:
-                st.markdown(f"""
-                #### 🌎 Expansión geográfica
-                - Niveo está ausente en **{total_sectores - sectores_con_niveo}** sectores.
-                - Identificar distribuidores locales en esas áreas.
-                - Realizar pruebas de mercado en 2-3 sectores prioritarios.
-                """)
-    else:
-        st.warning("No se encontraron datos de marcas para análisis")
+    Este reporte responde específicamente a las preguntas del levantamiento de mercado
+    y proporciona recomendaciones estratégicas basadas en los hallazgos.
+    """)
     
-    # ------------------------------------------------------------
-    # 2. ANÁLISIS DE PRECIOS
-    # ------------------------------------------------------------
-    st.subheader("💰 Análisis de Precios", divider="gray")
-    
-    # Identificar columnas de precios
-    precio_cols = [col for col in df.columns if col.startswith('PRECIO_')]
-    
-    if precio_cols:
-        # Preparar datos de precios
-        precios_data = []
-        for col in precio_cols:
-            marca = col.replace('PRECIO_', '')
-            precios_validos = df[col].dropna()
-            if not precios_validos.empty:
-                precios_data.append({
-                    'Marca': marca,
-                    'Promedio': precios_validos.mean(),
-                    'Mediana': precios_validos.median(),
-                    'Min': precios_validos.min(),
-                    'Max': precios_validos.max(),
-                    'CV': (precios_validos.std() / precios_validos.mean()) * 100  # Coeficiente de variación
-                })
-        
-        if precios_data:
-            df_precios = pd.DataFrame(precios_data)
-            
-            # Mostrar métricas clave
-            st.markdown("#### 📊 Estadísticas de Precios")
-            col1, col2, col3 = st.columns(3)
-            precio_promedio = df_precios['Promedio'].mean()
-            rango_precios = df_precios['Max'].max() - df_precios['Min'].min()
-            
-            col1.metric("Precio promedio general", f"${precio_promedio:.2f}")
-            col2.metric("Rango de precios", f"${rango_precios:.2f}")
-            
-            # Encontrar la marca con mejor relación precio/participación
-            if 'MARCAS_LISTA' in df.columns:
-                participacion = marcas_explotadas['MARCAS_LISTA'].value_counts(normalize=True)
-                df_precios['Participacion'] = df_precios['Marca'].map(participacion).fillna(0)
-                df_precios['Ratio'] = df_precios['Participacion'] / df_precios['Promedio']
-                mejor_ratio = df_precios.loc[df_precios['Ratio'].idxmax()]
-                col3.metric("Mejor relación precio/participación", mejor_ratio['Marca'], f"${mejor_ratio['Promedio']:.2f}")
-            
-            # Gráfico de distribución de precios
-            fig_precios = px.box(
-                df_precios.melt(id_vars=['Marca'], 
-                               value_vars=['Min', 'Promedio', 'Max'],
-                               var_name='Metrica', 
-                               value_name='Precio'),
-                x='Marca',
-                y='Precio',
-                color='Metrica',
-                title="Distribución de Precios por Marca",
-                points="all"
-            )
-            st.plotly_chart(fig_precios, use_container_width=True, key="boxplot_precios")
-            
-            # Recomendaciones de precios
-            with st.expander("💡 Insights de precios", expanded=True):
-                if 'NIVEO' in df_precios['Marca'].values:
-                    niveo_precio = df_precios[df_precios['Marca'] == 'NIVEO'].iloc[0]
-                    st.markdown(f"""
-                    #### 🏷️ Posicionamiento de Niveo
-                    - **Precio promedio:** ${niveo_precio['Promedio']:.2f}
-                    - **Comparativo:** { 'Por encima' if niveo_precio['Promedio'] > precio_promedio else 'Por debajo'} del promedio del mercado
-                    """)
-                    
-                    if niveo_precio['Promedio'] > precio_promedio:
-                        st.markdown("""
-                        **Recomendación:** 
-                        - Desarrollar estrategias de valor agregado para justificar el precio premium.
-                        - Considerar empaques promocionales o bonificaciones por volumen.
-                        """)
-                    else:
-                        st.markdown("""
-                        **Oportunidad:**
-                        - Potencial para incrementar precio manteniendo buena relación valor/precio.
-                        - Realizar pruebas de sensibilidad de precio en sectores seleccionados.
-                        """)
+    if st.button("📊 Generar Resumen Ejecutivo Completo", type="primary"):
+        with st.spinner("Generando resumen ejecutivo completo..."):
+            try:
+                pdf_buffer = generar_resumen_ejecutivo_completo(df, marcas_explotadas)
                 
-                # Análisis de competencia directa
-                st.markdown("""
-                #### 🥊 Análisis competitivo
-                - Identificar marcas con precios similares para análisis de ventaja competitiva.
-                - Monitorear promociones y descuentos de la competencia.
-                """)
-        else:
-            st.warning("No se encontraron datos de precios válidos para análisis")
-    else:
-        st.warning("No se encontraron columnas de precios en los datos")
-    
-    # ------------------------------------------------------------
-    # 3. ANÁLISIS GEOGRÁFICO
-    # ------------------------------------------------------------
-    st.header("🌍 Análisis Geográfico", divider="rainbow")
-    
-    # Verificación inicial de columnas
-    if 'Latitud' not in df.columns or 'Longitud' not in df.columns:
-        st.error("""
-        **Error:** No se encontraron las columnas de geolocalización.
-        Columnas necesarias: 'Latitud' y 'Longitud'
-        Columnas disponibles: {}
-        """.format(list(df.columns)))
-        st.stop()
-    
-    # Filtrar datos geográficos válidos
-    df_geo = df.dropna(subset=['Latitud', 'Longitud']).copy()
-    
-    if len(df_geo) == 0:
-        st.warning("No hay registros con coordenadas válidas para mostrar el mapa")
-        st.stop()
-    
-    # Verificar rango de coordenadas (aproximadamente República Dominicana)
-    dr_mask = (
-        (df_geo['Latitud'].between(17, 20)) & 
-        (df_geo['Longitud'].between(-72, -68))
-    )
-    if not dr_mask.any():
-        st.warning("""
-        **Atención:** Las coordenadas no parecen estar en el rango de República Dominicana.
-        Latitud esperada: ~17-20° | Longitud esperada: ~-72 a -68°
-        """)
-    
-    # Configuración del mapa
-    try:
-        # Calcular centro del mapa
-        avg_lat = df_geo['Latitud'].mean()
-        avg_lon = df_geo['Longitud'].mean()
-        
-        # Capa de puntos básica
-        scatter_layer = pdk.Layer(
-            'ScatterplotLayer',
-            data=df_geo,
-            get_position=['Longitud', 'Latitud'],
-            get_color='[200, 30, 0, 160]',  # RGBA (rojo)
-            get_radius=200,  # Tamaño de los puntos
-            pickable=True,
-            stroked=True,
-            filled=True,
-            extruded=False,
-            radius_scale=10,
-            radius_min_pixels=5,
-            radius_max_pixels=15
-        )
-        
-        # Tooltip informativo
-        tooltip = {
-            "html": """
-            <div style="padding: 10px; background: white; color: black; border-radius: 5px;">
-                <b>Sector:</b> {SELECCION BARRIO/SECTOR}<br>
-                <b>Tipo:</b> {TIPO DE COLMADO}<br>
-                <b>Marcas:</b> {CUALES MARCAS ESTAN PRESENTES EN EL ESTABLECIMIENTO}<br>
-                <b>Coords:</b> {Latitud:.4f}, {Longitud:.4f}
-            </div>
-            """,
-            "style": {
-                "backgroundColor": "white",
-                "color": "black",
-                "fontFamily": '"Helvetica Neue", Arial',
-                "zIndex": "10000"
-            }
-        }
-        
-        # Vista inicial del mapa
-        view_state = pdk.ViewState(
-            latitude=avg_lat,
-            longitude=avg_lon,
-            zoom=11,
-            pitch=45,
-            bearing=0
-        )
-        
-        # Configuración final del mapa
-        deck = pdk.Deck(
-            layers=[scatter_layer],
-            initial_view_state=view_state,
-            tooltip=tooltip,
-            map_style='mapbox://styles/mapbox/light-v9',
-            height=600
-        )
-        
-        # Mostrar el mapa con controles adicionales
-        st.pydeck_chart(deck)
-        
-        # Mostrar estadísticas básicas
-        with st.expander("📊 Estadísticas Geográficas", expanded=True):
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Establecimientos mapeados", len(df_geo))
-            col2.metric("Latitud promedio", f"{avg_lat:.4f}°")
-            col3.metric("Longitud promedio", f"{avg_lon:.4f}°")
-            
-            # Mostrar puntos extremos
-            st.write("**Puntos extremos:**")
-            st.write(f"Norte: {df_geo['Latitud'].max():.4f}° | "
-                    f"Sur: {df_geo['Latitud'].min():.4f}° | "
-                    f"Este: {df_geo['Longitud'].max():.4f}° | "
-                    f"Oeste: {df_geo['Longitud'].min():.4f}°")
-        
-    except Exception as e:
-        st.error(f"Error al generar el mapa: {str(e)}")
-        st.write("**Datos usados para el mapa:**")
-        st.write(df_geo[['Latitud', 'Longitud']].head())
-    
-    # ------------------------------------------------------------
-    # 4. REPORTE DESCARGABLE
-    # ------------------------------------------------------------
-    st.subheader("📤 Generar Reporte", divider="gray")
-    
-    if st.button("🔄 Generar Reporte de Insights"):
-        with st.spinner("Generando reporte..."):
-            # Crear contenido del reporte
-            report_content = f"""
-            # 📊 Reporte de Insights Automáticos - {datetime.now().strftime('%Y-%m-%d')}
-            
-            ## 🏷️ Análisis de Marcas
-            - Marca líder: {marca_lider} ({porcentaje_lider:.1f}% penetración)
-            - Presencia Niveo: {niveo_porcentaje:.1f}%
-            - Cobertura geográfica: {sectores_con_niveo}/{total_sectores} sectores
-            
-            ## 💰 Análisis de Precios
-            - Precio promedio general: ${precio_promedio:.2f}
-            - Rango de precios: ${rango_precios:.2f}
-            """
-            
-            # Crear botón de descarga
-            st.download_button(
-                label="📥 Descargar Reporte Completo",
-                data=report_content,
-                file_name=f"insights_niveo_{datetime.now().strftime('%Y%m%d')}.md",
-                mime="text/markdown"
-            )
+                # Crear botón de descarga
+                b64 = base64.b64encode(pdf_buffer.getvalue()).decode()
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="resumen_ejecutivo_niveo_{datetime.now().strftime("%Y%m%d")}.pdf">⬇️ Descargar Resumen Ejecutivo Completo</a>'
+                
+                st.success("✅ Resumen ejecutivo generado exitosamente!")
+                st.markdown(href, unsafe_allow_html=True)
+                
+            except Exception as e:
+                st.error(f"Error al generar el resumen ejecutivo: {str(e)}")
 
 # ----------------------------------------
 # FOOTER
