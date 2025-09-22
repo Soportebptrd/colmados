@@ -961,40 +961,40 @@ def generar_resumen_ejecutivo_completo(df, marcas_explotadas):
         
         pdf.chapter_body(respuesta_8)
     
-    # # 2. RECOMENDACIONES ESTRATÉGICAS
-    # pdf.add_page()
-    # pdf.chapter_title('RECOMENDACIONES ESTRATÉGICAS BASADAS EN LOS HALLAZGOS')
+    # RECOMENDACIONES ESTRATÉGICAS
+    pdf.add_page()
+    pdf.chapter_title('RECOMENDACIONES ESTRATÉGICAS BASADAS EN LOS HALLAZGOS')
     
-    # recomendaciones = """
-    # 1. ESTRATEGIA DE PENETRACIÓN DE MERCADO
-    # • Incrementar presencia de NIVEO en sectores con baja penetración
-    # • Desarrollar programas de incentivos para distribuidores
-    # • Implementar estrategias de visual merchandising en puntos de venta
+    recomendaciones_texto = """
+1. ESTRATEGIA DE PENETRACIÓN DE MERCADO
+• Incrementar presencia de NIVEO en sectores con baja penetración
+• Desarrollar programas de incentivos para distribuidores
+• Implementar estrategias de visual merchandising en puntos de venta
+
+2. OPTIMIZACIÓN DE PRECIOS
+• Analizar competitividad de precios frente a marcas líderes
+• Desarrollar estrategias de valor agregado
+• Considerar promociones temporales en sectores competitivos
+
+3. FORTALECIMIENTO DE DISTRIBUCIÓN
+• Identificar y fortalecer relación con proveedores clave
+• Desarrollar programa de capacitación para vendedores
+• Implementar sistema de monitoreo de inventarios
+
+4. ESTRATEGIA DIGITAL
+• Evaluar oportunidades en plataformas digitales de pedidos
+• Desarrollar aplicación propia si es viable
+• Capacitar distribuidores en uso de tecnologías digitales
+
+5. CAPITALIZACIÓN DE INFLUENCIA
+• Desarrollar programa de incentivos para vendedores
+• Crear material de capacitación sobre beneficios de NIVEO
+• Implementar sistema de reconocimiento por ventas
+"""
     
-    # 2. OPTIMIZACIÓN DE PRECIOS
-    # • Analizar competitividad de precios frente a marcas líderes
-    # • Desarrollar estrategias de valor agregado
-    # • Considerar promociones temporales en sectores competitivos
+    pdf.chapter_body(recomendaciones_texto)
     
-    # 3. FORTALECIMIENTO DE DISTRIBUCIÓN
-    # • Identificar y fortalecer relación con proveedores clave
-    # • Desarrollar programa de capacitación para vendedores
-    # • Implementar sistema de monitoreo de inventarios
-    
-    # 4. ESTRATEGIA DIGITAL
-    # • Evaluar oportunidades en plataformas digitales de pedidos
-    # • Desarrollar aplicación propia si es viable
-    # • Capacitar distribuidores en uso de tecnologías digitales
-    
-    # 5. CAPITALIZACIÓN DE INFLUENCIA
-    # • Desarrollar programa de incentivos para vendedores
-    # • Crear material de capacitación sobre beneficios de NIVEO
-    # • Implementar sistema de reconocimiento por ventas
-    # """
-    
-    pdf.chapter_body(recomendaciones)
-    
-    # 3. METODOLOGÍA
+    # METODOLOGÍA
     pdf.add_page()
     pdf.chapter_title('METODOLOGÍA DEL ESTUDIO')
     
