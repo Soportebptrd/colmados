@@ -25,7 +25,7 @@ import tempfile
 # CONFIGURACIÓN INICIAL
 # ----------------------------------------
 st.set_page_config(
-    page_title="🚀 Dashboard Levantamiento de Mercado - Niveo", 
+    page_title="🚀 Dashboard Levantamiento de Mercado", 
     layout="wide",
     page_icon="📊",
     initial_sidebar_state="expanded"
